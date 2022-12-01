@@ -1,7 +1,6 @@
 use crate::hash::{default_hasher, default_hasher_with_seed};
 use crate::node::{Node, NodeId, NodeType};
 use std::fmt::Debug;
-use std::os::unix::process::parent_id;
 
 pub type Hasher = fn(&str) -> u64;
 
@@ -119,10 +118,10 @@ impl Tree {
         leaf.hash = (self.hasher)(&data).to_be_bytes();
         self.leaf_size += 1;
 
-        // Optimization: if the tree is full, resize it first
+        // Optimization: if the tree_new is full, resize it first
         let real_capacity = usize::pow(self.max_width, self.height as u32 + 1);
         if self.leaf_size == real_capacity + 1 {
-            // Create new root
+            // Create tree_new root
             let new_root_id = leaf_id + 1;
             let mut new_root = Node::new(NodeType::Root, new_root_id, None);
 
@@ -135,7 +134,7 @@ impl Tree {
             new_root.children = vec![old_root.id, leaf_id];
             leaf.parent = Some(new_root_id);
 
-            // Update tree
+            // Update tree_new
             self.nodes.push(leaf);
             self.nodes.push(new_root);
             self.size += 2;
