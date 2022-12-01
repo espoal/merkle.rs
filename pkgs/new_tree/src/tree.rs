@@ -14,6 +14,7 @@ pub struct Tree {
     capacity: usize,
     leaf_count: usize,
     last_parent: NodeId,
+    last_leaf: NodeId,
 }
 
 impl Debug for Tree {
@@ -29,23 +30,24 @@ impl Tree {
     pub fn new_with_opts(option: TreeOptions) -> Self {
         let hasher = match option.hasher {
             Some(hasher) => hasher,
-            None => default_hasher,
+            None => default_hasher(),
         };
 
         let root = Node::new(NodeType::Root, 0, None);
-        let mut nodes = Vec::with_capacity(3);
+        let mut nodes = Vec::with_capacity(1 + option.max_width);
         nodes.push(root);
 
         Self {
             height: 1,
-            size: 0,
-            capacity: 2,
+            size: 1,
+            capacity: option.max_width + 1,
             leaf_count: 0,
             root: 0,
             max_width: option.max_width,
             hasher,
             nodes,
             last_parent: 0,
+            last_leaf: 0,
         }
     }
 }
@@ -70,8 +72,11 @@ impl Tree {
     pub fn insert(&mut self, value: String) -> NodeId {
         let leaf_id = self.nodes.len() as NodeId;
         let mut leaf = Node::new(NodeType::Leaf, leaf_id, Some(value.to_string()));
+        leaf.children = vec![self.last_leaf];
         leaf.hash = (self.hasher)(&value);
         self.size += 1;
+        self.leaf_count += 1;
+        self.last_leaf = leaf_id;
 
         // If capacity is not enough, grow the tree then insert the leaf
         // Could make the tree balanced by implementing a rotation here
@@ -142,6 +147,30 @@ impl Tree {
         None
     }
 
+    fn grow(&mut self) {
+        // Create tree_new root
+        let new_root_id = self.nodes.len() as NodeId;
+        let mut new_root = Node::new(NodeType::Root, new_root_id, None);
+
+        // Update old root
+        let old_root = self.get_mut_root();
+        old_root.node_type = NodeType::Internal;
+
+        // Update relationships
+        old_root.parent = Some(new_root_id);
+        new_root.children = vec![old_root.id];
+
+        // Update tree_new
+        self.height += 1;
+        let additional_capacity = self.max_width.pow(self.height as u32);
+        self.nodes.reserve(additional_capacity);
+        self.nodes.push(new_root);
+        //self.size += 1;
+        self.capacity *= self.max_width;
+        self.root = new_root_id;
+        self.last_parent = new_root_id;
+    }
+
     fn grow_and_insert(&mut self, leaf: Node) -> NodeId {
         let mut leaf = leaf;
         let leaf_id = leaf.id;
@@ -160,13 +189,14 @@ impl Tree {
         leaf.parent = Some(new_root_id);
 
         // Update tree_new
-        // TODO: Resize array
+        self.height += 1;
+        let additional_capacity = self.max_width.pow(self.height as u32);
+        self.nodes.reserve(additional_capacity);
         self.nodes.push(leaf);
         self.nodes.push(new_root);
         //self.size += 1;
-        self.capacity += self.capacity;
+        self.capacity *= self.max_width;
         self.root = new_root_id;
-        self.height += 1;
         self.last_parent = new_root_id;
 
         //let visited_nodes = vec![new_root_id, leaf_id];
