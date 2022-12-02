@@ -68,6 +68,7 @@ impl Tree {
         None
     }
 
+    // TODO: add batch version
     pub fn insert(&mut self, value: String) -> NodeId {
         let leaf_id = self.nodes.len() as NodeId;
         let mut leaf = Node::new(NodeType::Leaf, leaf_id, Some(value.to_string()));
@@ -168,6 +169,7 @@ impl Tree {
         Some(proof_material)
     }
 
+    // TODO: merge with grow_and_insert
     fn grow(&mut self) {
         // Create tree_new root
         let new_root_id = self.nodes.len() as NodeId;
@@ -192,6 +194,7 @@ impl Tree {
         self.last_parent = new_root_id;
     }
 
+    // TODO: merge with grow
     fn grow_and_insert(&mut self, leaf: Node) -> NodeId {
         let mut leaf = leaf;
         let leaf_id = leaf.id;
@@ -274,8 +277,6 @@ impl Tree {
             if node.node_type == NodeType::Root {
                 break;
             }
-            //let mut node = self.get_mut(index as usize).unwrap();
-            //node.hash = hash;
 
             node = self.get(node.parent.unwrap() as usize).unwrap();
         }
@@ -286,6 +287,14 @@ impl Tree {
         }
     }
 
+    // TODO: implement verify
+    fn verify(&self) {}
+
+    // TODO: implement traversal for batch updates
+    fn path_to_root(&self) {}
+
     // TODO: to be called in grow_and_insert to rebalance the tree
     fn rotate(&mut self) {}
 }
+
+fn merge_paths() {}
