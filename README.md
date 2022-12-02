@@ -2,7 +2,7 @@
 An example of a merkle b-tree in Rust
 
 The tree has variable branching factor, so it's a b-tree.
-The tree is not balanced, but searches are `log(n)+log(2)`, 
+The tree is not balanced, but searches are at most `log(n)+log(branch_factor)`, 
 so the `O(log(n))` asymptotic limit is respected, and it 
 allows for some optimizations:
 - recent transactions are cheaper to verify (roughly `log(log(n))`)
