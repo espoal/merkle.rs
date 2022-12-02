@@ -1,8 +1,7 @@
-use crate::hash::{default_hasher, Hasher};
+use crate::hash::{default_hasher, HashBuff, Hasher};
 use crate::new::TreeOptions;
 use crate::node::{Node, NodeId, NodeType};
 use std::fmt::Debug;
-use std::ops::{Deref, DerefMut};
 
 pub struct Tree {
     height: usize,
@@ -73,7 +72,7 @@ impl Tree {
         let leaf_id = self.nodes.len() as NodeId;
         let mut leaf = Node::new(NodeType::Leaf, leaf_id, Some(value.to_string()));
         leaf.children = vec![self.last_leaf];
-        leaf.hash = (self.hasher)(&value);
+        leaf.hash = (self.hasher)(leaf.value.as_ref().unwrap().as_bytes());
         self.size += 1;
         self.leaf_count += 1;
         self.last_leaf = leaf_id;
@@ -82,6 +81,7 @@ impl Tree {
         // Could make the tree balanced by implementing a rotation here
         if self.size == self.capacity + 1 {
             self.grow_and_insert(leaf);
+            self.update_hash(leaf_id);
             return leaf_id;
         }
 
@@ -93,6 +93,7 @@ impl Tree {
             parent.children.push(leaf_id);
             leaf.parent = Some(self.last_parent);
             self.nodes.push(leaf);
+            self.update_hash(leaf_id);
 
             return leaf_id;
         }
@@ -128,12 +129,9 @@ impl Tree {
                     parent.children = vec![new_internal_id, leaf_id];
                 }
 
-                //let free_parent = self.find_free_parent().unwrap();
                 self.last_parent = last_parent;
 
-                //println!("free_parent: {:?}", free_parent);
-                //println!("last_parent: {:?}", last_parent);
-
+                self.update_hash(leaf_id);
                 return leaf_id;
             }
         }
@@ -143,8 +141,31 @@ impl Tree {
         0 as NodeId
     }
 
-    pub fn get_proof_material(&self, index: usize) -> Option<Vec<&Node>> {
-        None
+    pub fn get_proof_material(&self, index: usize) -> Option<Vec<HashBuff>> {
+        let node = self.get(index)?;
+        if node.node_type != NodeType::Leaf {
+            return None;
+        }
+        let mut parent_id = node.parent?;
+        let mut parent = self.get(parent_id as usize)?;
+
+        let mut proof_material: Vec<HashBuff> =
+            Vec::with_capacity(self.height * self.max_width + 1);
+
+        loop {
+            for child_id in parent.children.iter() {
+                let child = self.get(*child_id as usize).unwrap();
+                proof_material.push(child.hash);
+            }
+            if parent.node_type == NodeType::Root {
+                proof_material.push(parent.hash);
+                break;
+            }
+            parent_id = parent.parent?;
+            parent = self.get(parent_id as usize)?;
+        }
+
+        Some(proof_material)
     }
 
     fn grow(&mut self) {
@@ -224,6 +245,45 @@ impl Tree {
         }
 
         None
+    }
+
+    fn update_hash(&mut self, index: NodeId) {
+        let mut node = self.get(index as usize).unwrap();
+
+        let proof_size = self.height * self.max_width + 1;
+        let mut visited_nodes = Vec::with_capacity(proof_size);
+        //visited_nodes.push(node.id);
+        let mut hashes: Vec<HashBuff> = Vec::with_capacity(proof_size);
+
+        loop {
+            if node.node_type == NodeType::Leaf {
+                node = self.get(node.parent.unwrap() as usize).unwrap();
+                continue;
+            }
+
+            let mut buff: Vec<u8> = Vec::with_capacity(self.max_width);
+            for child_id in node.children.iter() {
+                let child = self.get(*child_id as usize).unwrap();
+                buff.append(&mut child.hash.to_vec());
+            }
+
+            let hash = (self.hasher)(&buff);
+            hashes.push(hash);
+            visited_nodes.push(node.id);
+
+            if node.node_type == NodeType::Root {
+                break;
+            }
+            //let mut node = self.get_mut(index as usize).unwrap();
+            //node.hash = hash;
+
+            node = self.get(node.parent.unwrap() as usize).unwrap();
+        }
+
+        for (i, node_id) in visited_nodes.iter().enumerate() {
+            let mut node = self.get_mut(*node_id as usize).unwrap();
+            node.hash = hashes[i];
+        }
     }
 
     // TODO: to be called in grow_and_insert to rebalance the tree

@@ -1,4 +1,4 @@
-use crate::hash::HASH_SIZE;
+use crate::hash::{HashBuff, HASH_SIZE};
 
 pub type NodeId = u64;
 #[derive(Debug, PartialEq)]
@@ -15,7 +15,7 @@ pub struct Node {
     pub parent: Option<NodeId>,
     pub children: Vec<NodeId>,
     pub value: Option<String>,
-    pub hash: [u8; HASH_SIZE],
+    pub hash: HashBuff,
 }
 
 impl Node {
