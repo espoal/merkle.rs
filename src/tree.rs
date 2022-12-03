@@ -64,8 +64,21 @@ impl Tree {
     pub fn get_mut(&mut self, index: usize) -> Option<&mut Node> {
         self.nodes.get_mut(index)
     }
-    pub fn get_by_value(&self, value: &str) -> Option<NodeId> {
-        None
+    pub fn find(&self, value: &str) -> Option<NodeId> {
+        let mut node = self.get(self.last_leaf as usize).unwrap();
+
+        loop {
+            if node.node_type == NodeType::Root {
+                return None;
+            }
+
+            let node_value = node.value.as_ref().unwrap();
+            if node_value == value {
+                return Some(node.id);
+            }
+
+            node = self.get(node.children[0] as usize).unwrap();
+        }
     }
 
     // TODO: add batch version
@@ -142,27 +155,30 @@ impl Tree {
         0 as NodeId
     }
 
-    pub fn get_proof_material(&self, index: usize) -> Option<Vec<HashBuff>> {
+    pub fn get_proof_material(&self, index: usize) -> Option<Vec<Vec<HashBuff>>> {
         let node = self.get(index)?;
-        if node.node_type != NodeType::Leaf {
-            return None;
-        }
+
         let mut parent_id = node.parent?;
+        let mut child_id = index as NodeId;
         let mut parent = self.get(parent_id as usize)?;
 
-        let mut proof_material: Vec<HashBuff> =
-            Vec::with_capacity(self.height * self.max_width + 1);
+        let mut proof_material: Vec<Vec<HashBuff>> = Vec::with_capacity(self.height);
 
         loop {
-            for child_id in parent.children.iter() {
-                let child = self.get(*child_id as usize).unwrap();
-                proof_material.push(child.hash);
+            let mut sibling_hashes: Vec<HashBuff> = Vec::with_capacity(self.max_width - 1);
+            for idx in parent.children.iter() {
+                if *idx == child_id {
+                    continue;
+                }
+                let child = self.get(*idx as usize)?;
+                sibling_hashes.push(child.hash);
             }
+            proof_material.push(sibling_hashes);
             if parent.node_type == NodeType::Root {
-                proof_material.push(parent.hash);
                 break;
             }
             parent_id = parent.parent?;
+            child_id = parent_id;
             parent = self.get(parent_id as usize)?;
         }
 
