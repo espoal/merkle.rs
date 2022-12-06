@@ -1,4 +1,4 @@
-use new_tree::tree;
+use old_tree::tree;
 use xxhash_rust::xxh3::xxh3_64;
 
 fn main() {
