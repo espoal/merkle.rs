@@ -75,6 +75,7 @@ impl Tree {
 
         let mut openings = Vec::with_capacity(self.height);
 
+        let old_id = 0;
         for node_id in root_path {
             let node = self.get_node(node_id).unwrap();
             if node.node_type == NodeType::Leaf {
