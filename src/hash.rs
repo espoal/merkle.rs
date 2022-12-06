@@ -29,7 +29,7 @@ impl Tree {
     }
 
     pub fn update_node_hash(&mut self, index: NodeId) {
-        let mut node = self.get_node(index).unwrap();
+        let node = self.get_node(index).unwrap();
         match node.node_type {
             NodeType::Leaf => {
                 //let mut buff: Vec<u8> = Vec::with_capacity(self.max_width);
@@ -50,15 +50,15 @@ impl Tree {
     }
 
     pub fn verify_node(&self, index: NodeId) -> Option<()> {
-        let mut node = self.get_node(index)?;
-        match node.node_type {
+        let node = self.get_node(index)?;
+        return match node.node_type {
             NodeType::Leaf => {
-                let mut buff: Vec<u8> = node.value.as_ref()?.as_bytes().to_vec();
+                let buff: Vec<u8> = node.value.as_ref()?.as_bytes().to_vec();
                 let hash = (self.hasher)(&buff);
                 if hash == node.hash {
-                    return Some(());
+                    Some(())
                 } else {
-                    return None;
+                    None
                 }
             }
             NodeType::Root | NodeType::Internal => {
@@ -69,12 +69,12 @@ impl Tree {
                 }
                 let hash = (self.hasher)(&buff);
                 if hash == node.hash {
-                    return Some(());
+                    Some(())
                 } else {
-                    return None;
+                    None
                 }
             }
-        }
+        };
     }
 
     pub fn verify_tree(&self, index: NodeId) -> Option<()> {

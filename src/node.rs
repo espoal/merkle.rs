@@ -2,14 +2,14 @@ use crate::hash::{HashBuff, HASH_SIZE};
 
 pub type NodeId = u64;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum NodeType {
     Root,
     Internal,
     Leaf,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Node {
     pub id: NodeId,
     pub node_type: NodeType,

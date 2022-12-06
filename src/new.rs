@@ -18,7 +18,7 @@ impl Default for TreeOptions {
 
 impl Default for Tree {
     fn default() -> Self {
-        Self::default()
+        Self::new()
     }
 }
 

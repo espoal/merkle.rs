@@ -21,6 +21,7 @@ impl Tree {
         let leaf_id = self.nodes.len() as NodeId;
         let leaf_hash = (self.hasher)(value.as_bytes());
         let mut leaf = Node::new_leaf(leaf_id, value, leaf_hash);
+        leaf.children = vec![self.last_leaf];
         self.size += 1;
         self.leaf_count += 1;
         self.last_leaf = leaf_id;
@@ -54,7 +55,6 @@ impl Tree {
         for (idx, child_id) in parent.children.iter().enumerate() {
             let child = self.get_node(*child_id).unwrap();
             if child.node_type == NodeType::Leaf {
-                let parent_id = parent.id;
                 let new_internal_id = leaf_id + 1;
                 let mut new_internal = Node::new_node(new_internal_id, self.max_width);
                 new_internal.parent = Some(parent.id);

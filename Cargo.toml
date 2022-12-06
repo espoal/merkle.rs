@@ -1,4 +1,9 @@
-[workspace]
+[package]
+name = "mtree"
+version = "0.1.0"
+edition = "2021"
 
-members = [
-"pkgs/*"]
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+xxhash-rust = { version = "0.8.5", features = ["xxh3"] }

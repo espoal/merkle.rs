@@ -1,5 +1,4 @@
-use crate::hash::{default_hasher, default_hasher_with_seed, Hasher};
-use crate::new::TreeOptions;
+use crate::hash::{HashBuff, Hasher};
 use crate::node::{Node, NodeId, NodeType};
 use std::fmt::Debug;
 
@@ -31,7 +30,7 @@ impl Tree {
     pub fn get_root(&self) -> &Node {
         self.nodes.get(self.root as usize).unwrap()
     }
-    pub fn get_mut_root(&mut self) -> &mut Node {
+    pub fn get_root_mut(&mut self) -> &mut Node {
         self.nodes.get_mut(self.root as usize).unwrap()
     }
     pub fn get_node(&self, index: NodeId) -> Option<&Node> {
@@ -40,17 +39,17 @@ impl Tree {
     pub fn get_node_mut(&mut self, index: NodeId) -> Option<&mut Node> {
         self.nodes.get_mut(index as usize)
     }
-    pub fn find_leaf(&self, value: &str) -> Option<NodeId> {
+    pub fn find_leaf(&self, value: &str) -> Option<Node> {
         let mut node = self.get_node(self.last_leaf)?;
 
         loop {
-            if node.node_type == NodeType::Root {
+            if node.node_type != NodeType::Leaf {
                 return None;
             }
 
             let node_value = node.value.as_ref()?;
             if node_value == value {
-                return Some(node.id);
+                return Some(node.clone());
             }
 
             // In the leaves we store 1 children as the pointer to the previous leaf
@@ -69,5 +68,26 @@ impl Tree {
             node = self.get_node(node.parent.unwrap()).unwrap();
         }
         path
+    }
+
+    pub fn get_opening(&self, node_id: NodeId) -> Vec<Vec<HashBuff>> {
+        let root_path = self.get_root_path(node_id);
+
+        let mut openings = Vec::with_capacity(self.height);
+
+        for node_id in root_path {
+            let node = self.get_node(node_id).unwrap();
+            if node.node_type == NodeType::Leaf {
+                continue;
+            }
+            let mut opening = Vec::with_capacity(node.children.len());
+            for child_id in node.children.iter() {
+                let child = self.get_node(*child_id).unwrap();
+                opening.push(child.hash);
+            }
+            openings.push(opening);
+        }
+
+        openings
     }
 }
