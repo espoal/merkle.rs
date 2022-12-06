@@ -18,10 +18,11 @@ impl Default for TreeOptions {
 
 impl Default for Tree {
     fn default() -> Self {
-        Self::default()
+        Self::new()
     }
 }
 
+// Creation methods
 impl Tree {
     pub fn new() -> Self {
         let default_opts = TreeOptions {
@@ -52,5 +53,30 @@ impl Tree {
         };
 
         Self::new_with_opts(default_opts)
+    }
+
+    pub fn new_with_opts(option: TreeOptions) -> Self {
+        let hasher = match option.hasher {
+            Some(hasher) => hasher,
+            None => default_hasher(),
+        };
+
+        let root = Node::new(0, NodeType::Root, option.max_width, None);
+        // The starting of the tree capacity is the root + max_width children
+        let mut nodes = Vec::with_capacity(1 + option.max_width);
+        nodes.push(root);
+
+        Self {
+            height: 1,
+            size: 1,
+            capacity: option.max_width + 1,
+            root: 0,
+            max_width: option.max_width,
+            hasher,
+            nodes,
+            last_parent: 0,
+            last_leaf: 0,
+            leaf_count: 0,
+        }
     }
 }

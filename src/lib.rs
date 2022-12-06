@@ -1,4 +1,6 @@
+mod ginsert;
 mod hash;
-mod new;
+mod insert;
+pub mod new;
 mod node;
 pub mod tree;

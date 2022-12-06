@@ -1,14 +1,15 @@
 use crate::hash::{HashBuff, HASH_SIZE};
 
 pub type NodeId = u64;
-#[derive(Debug, PartialEq)]
+
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum NodeType {
     Root,
     Internal,
     Leaf,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Node {
     pub id: NodeId,
     pub node_type: NodeType,
@@ -19,14 +20,44 @@ pub struct Node {
 }
 
 impl Node {
-    pub fn new(node_type: NodeType, id: NodeId, value: Option<String>) -> Self {
+    pub fn new(id: NodeId, node_type: NodeType, max_width: usize, value: Option<String>) -> Self {
         Self {
-            node_type,
             id,
+            node_type,
             parent: None,
-            children: Vec::new(),
+            children: Vec::with_capacity(max_width),
             value,
             hash: [0; HASH_SIZE],
+        }
+    }
+    pub fn new_root(id: NodeId, max_width: usize) -> Self {
+        Self {
+            id,
+            node_type: NodeType::Root,
+            parent: None,
+            children: Vec::with_capacity(max_width),
+            value: None,
+            hash: [0; HASH_SIZE],
+        }
+    }
+    pub fn new_node(id: NodeId, max_width: usize) -> Self {
+        Self {
+            id,
+            node_type: NodeType::Internal,
+            parent: None,
+            children: Vec::with_capacity(max_width),
+            value: None,
+            hash: [0; HASH_SIZE],
+        }
+    }
+    pub fn new_leaf(id: NodeId, value: String, hash: HashBuff) -> Self {
+        Self {
+            id,
+            node_type: NodeType::Leaf,
+            parent: None,
+            children: Vec::with_capacity(1),
+            value: Some(value),
+            hash,
         }
     }
 }

@@ -1,19 +1,18 @@
-use crate::hash::{default_hasher, HashBuff, Hasher};
-use crate::new::TreeOptions;
+use crate::hash::{HashBuff, Hasher};
 use crate::node::{Node, NodeId, NodeType};
 use std::fmt::Debug;
 
 pub struct Tree {
-    height: usize,
-    max_width: usize,
-    root: NodeId,
-    hasher: Hasher,
-    nodes: Vec<Node>,
-    size: usize,
-    capacity: usize,
-    leaf_count: usize,
-    last_parent: NodeId,
-    last_leaf: NodeId,
+    pub root: NodeId,
+    pub last_parent: NodeId,
+    pub last_leaf: NodeId,
+    pub nodes: Vec<Node>,
+    pub max_width: usize,
+    pub height: usize,
+    pub capacity: usize,
+    pub size: usize,
+    pub leaf_count: usize,
+    pub hasher: Hasher,
 }
 
 impl Debug for Tree {
@@ -25,292 +24,71 @@ impl Debug for Tree {
     }
 }
 
+// Utility methods
 impl Tree {
-    pub fn new_with_opts(option: TreeOptions) -> Self {
-        let hasher = match option.hasher {
-            Some(hasher) => hasher,
-            None => default_hasher(),
-        };
-
-        let root = Node::new(NodeType::Root, 0, None);
-        let mut nodes = Vec::with_capacity(1 + option.max_width);
-        nodes.push(root);
-
-        Self {
-            height: 1,
-            size: 1,
-            capacity: option.max_width + 1,
-            leaf_count: 0,
-            root: 0,
-            max_width: option.max_width,
-            hasher,
-            nodes,
-            last_parent: 0,
-            last_leaf: 0,
-        }
-    }
-}
-
-impl Tree {
+    // Getters allow us to abstract away the internal representation of the tree
     pub fn get_root(&self) -> &Node {
         self.nodes.get(self.root as usize).unwrap()
     }
-    pub fn get_mut_root(&mut self) -> &mut Node {
+    pub fn get_root_mut(&mut self) -> &mut Node {
         self.nodes.get_mut(self.root as usize).unwrap()
     }
-    pub fn get(&self, index: usize) -> Option<&Node> {
-        self.nodes.get(index)
+    pub fn get_node(&self, index: NodeId) -> Option<&Node> {
+        self.nodes.get(index as usize)
     }
-    pub fn get_mut(&mut self, index: usize) -> Option<&mut Node> {
-        self.nodes.get_mut(index)
+    pub fn get_node_mut(&mut self, index: NodeId) -> Option<&mut Node> {
+        self.nodes.get_mut(index as usize)
     }
-    pub fn find(&self, value: &str) -> Option<NodeId> {
-        let mut node = self.get(self.last_leaf as usize).unwrap();
+    pub fn find_leaf(&self, value: &str) -> Option<Node> {
+        let mut node = self.get_node(self.last_leaf)?;
 
         loop {
-            if node.node_type == NodeType::Root {
+            if node.node_type != NodeType::Leaf {
                 return None;
             }
 
-            let node_value = node.value.as_ref().unwrap();
+            let node_value = node.value.as_ref()?;
             if node_value == value {
-                return Some(node.id);
+                return Some(node.clone());
             }
 
-            node = self.get(node.children[0] as usize).unwrap();
+            // In the leaves we store 1 children as the pointer to the previous leaf
+            node = self.get_node(node.children[0])?;
         }
     }
 
-    // TODO: add batch version
-    pub fn insert(&mut self, value: String) -> NodeId {
-        let leaf_id = self.nodes.len() as NodeId;
-        let mut leaf = Node::new(NodeType::Leaf, leaf_id, Some(value.to_string()));
-        leaf.children = vec![self.last_leaf];
-        leaf.hash = (self.hasher)(leaf.value.as_ref().unwrap().as_bytes());
-        self.size += 1;
-        self.leaf_count += 1;
-        self.last_leaf = leaf_id;
-
-        // If capacity is not enough, grow the tree then insert the leaf
-        // Could make the tree balanced by implementing a rotation here
-        if self.size == self.capacity + 1 {
-            self.grow_and_insert(leaf);
-            self.update_hash(leaf_id);
-            return leaf_id;
-        }
-
-        let parent = self.get(self.last_parent as usize).unwrap();
-
-        // Simple case: there is still space in the last parent node
-        if parent.children.len() < self.max_width {
-            let parent = self.get_mut(self.last_parent as usize).unwrap();
-            parent.children.push(leaf_id);
-            leaf.parent = Some(self.last_parent);
-            self.nodes.push(leaf);
-            self.update_hash(leaf_id);
-
-            return leaf_id;
-        }
-
-        // Hard case, we need to create a new internal node before inserting
-        for (idx, child_id) in parent.children.iter().enumerate() {
-            let child = self.get(*child_id as usize).unwrap();
-            if child.node_type == NodeType::Leaf {
-                let new_internal_id = leaf_id + 1;
-                let mut new_internal = Node::new(NodeType::Internal, new_internal_id, None);
-                new_internal.parent = Some(parent.id);
-
-                let is_tail = idx >= parent.children.len() - 1;
-                let last_parent = if is_tail { new_internal_id } else { parent.id };
-
-                if is_tail {
-                    new_internal.children = vec![*child_id, leaf_id];
-                } else {
-                    new_internal.children = parent.children.clone();
-                }
-
-                let child = self.get_mut(*child_id as usize).unwrap();
-                child.parent = Some(new_internal_id);
-                leaf.parent = Some(new_internal_id);
-
-                self.nodes.push(leaf);
-                self.nodes.push(new_internal);
-
-                let parent = self.get_mut(self.last_parent as usize).unwrap();
-                if is_tail {
-                    parent.children[idx] = new_internal_id;
-                } else {
-                    parent.children = vec![new_internal_id, leaf_id];
-                }
-
-                self.last_parent = last_parent;
-
-                self.update_hash(leaf_id);
-                return leaf_id;
-            }
-        }
-
-        panic!("Should not reach here");
-
-        0 as NodeId
-    }
-
-    pub fn get_proof_material(&self, index: usize) -> Option<Vec<Vec<HashBuff>>> {
-        let node = self.get(index)?;
-
-        let mut parent_id = node.parent?;
-        let mut child_id = index as NodeId;
-        let mut parent = self.get(parent_id as usize)?;
-
-        let mut proof_material: Vec<Vec<HashBuff>> = Vec::with_capacity(self.height);
-
+    pub fn get_root_path(&self, node_id: NodeId) -> Vec<NodeId> {
+        let mut path = Vec::with_capacity(self.height);
+        let mut node = self.get_node(node_id).unwrap();
         loop {
-            let mut sibling_hashes: Vec<HashBuff> = Vec::with_capacity(self.max_width - 1);
-            for idx in parent.children.iter() {
-                if *idx == child_id {
-                    continue;
-                }
-                let child = self.get(*idx as usize)?;
-                sibling_hashes.push(child.hash);
-            }
-            proof_material.push(sibling_hashes);
-            if parent.node_type == NodeType::Root {
-                break;
-            }
-            parent_id = parent.parent?;
-            child_id = parent_id;
-            parent = self.get(parent_id as usize)?;
-        }
-
-        Some(proof_material)
-    }
-
-    // TODO: merge with grow_and_insert
-    fn grow(&mut self) {
-        // Create tree_new root
-        let new_root_id = self.nodes.len() as NodeId;
-        let mut new_root = Node::new(NodeType::Root, new_root_id, None);
-
-        // Update old root
-        let old_root = self.get_mut_root();
-        old_root.node_type = NodeType::Internal;
-
-        // Update relationships
-        old_root.parent = Some(new_root_id);
-        new_root.children = vec![old_root.id];
-
-        // Update tree_new
-        self.height += 1;
-        let additional_capacity = self.max_width.pow(self.height as u32);
-        self.nodes.reserve(additional_capacity);
-        self.nodes.push(new_root);
-        //self.size += 1;
-        self.capacity *= self.max_width;
-        self.root = new_root_id;
-        self.last_parent = new_root_id;
-    }
-
-    // TODO: merge with grow
-    fn grow_and_insert(&mut self, leaf: Node) -> NodeId {
-        let mut leaf = leaf;
-        let leaf_id = leaf.id;
-
-        // Create tree_new root
-        let new_root_id = self.nodes.len() as NodeId + 1;
-        let mut new_root = Node::new(NodeType::Root, new_root_id, None);
-
-        // Update old root
-        let old_root = self.get_mut_root();
-        old_root.node_type = NodeType::Internal;
-
-        // Update relationships
-        old_root.parent = Some(new_root_id);
-        new_root.children = vec![old_root.id, leaf_id];
-        leaf.parent = Some(new_root_id);
-
-        // Update tree_new
-        self.height += 1;
-        let additional_capacity = self.max_width.pow(self.height as u32);
-        self.nodes.reserve(additional_capacity);
-        self.nodes.push(leaf);
-        self.nodes.push(new_root);
-        //self.size += 1;
-        self.capacity *= self.max_width;
-        self.root = new_root_id;
-        self.last_parent = new_root_id;
-
-        //let visited_nodes = vec![new_root_id, leaf_id];
-
-        leaf_id
-    }
-
-    // Ugly width first search to find a free parent
-    // Used only for debugging
-    // Could make it efficient by using recursion
-    fn find_free_parent(&self) -> Option<NodeId> {
-        let mut parent = self.get(self.root as usize).unwrap();
-        let mut children = Vec::from(parent.children.clone());
-
-        loop {
-            let mut new_children: Vec<NodeId> = Vec::with_capacity(children.len() * self.max_width);
-            for child_id in children.iter() {
-                let child = self.get(*child_id as usize).unwrap();
-                if child.node_type == NodeType::Leaf {
-                    return Some(child.parent.unwrap());
-                }
-                new_children.extend(child.children.clone());
-            }
-            children = new_children;
-        }
-
-        None
-    }
-
-    fn update_hash(&mut self, index: NodeId) {
-        let mut node = self.get(index as usize).unwrap();
-
-        let proof_size = self.height * self.max_width + 1;
-        let mut visited_nodes = Vec::with_capacity(proof_size);
-        //visited_nodes.push(node.id);
-        let mut hashes: Vec<HashBuff> = Vec::with_capacity(proof_size);
-
-        loop {
-            if node.node_type == NodeType::Leaf {
-                node = self.get(node.parent.unwrap() as usize).unwrap();
-                continue;
-            }
-
-            let mut buff: Vec<u8> = Vec::with_capacity(self.max_width);
-            for child_id in node.children.iter() {
-                let child = self.get(*child_id as usize).unwrap();
-                buff.append(&mut child.hash.to_vec());
-            }
-
-            let hash = (self.hasher)(&buff);
-            hashes.push(hash);
-            visited_nodes.push(node.id);
-
+            path.push(node.id);
             if node.node_type == NodeType::Root {
                 break;
             }
-
-            node = self.get(node.parent.unwrap() as usize).unwrap();
+            node = self.get_node(node.parent.unwrap()).unwrap();
         }
-
-        for (i, node_id) in visited_nodes.iter().enumerate() {
-            let mut node = self.get_mut(*node_id as usize).unwrap();
-            node.hash = hashes[i];
-        }
+        path
     }
 
-    // TODO: implement verify
-    fn verify(&self) {}
+    pub fn get_opening(&self, node_id: NodeId) -> Vec<Vec<HashBuff>> {
+        let root_path = self.get_root_path(node_id);
 
-    // TODO: implement traversal for batch updates
-    fn path_to_root(&self) {}
+        let mut openings = Vec::with_capacity(self.height);
 
-    // TODO: to be called in grow_and_insert to rebalance the tree
-    fn rotate(&mut self) {}
+        let old_id = 0;
+        for node_id in root_path {
+            let node = self.get_node(node_id).unwrap();
+            if node.node_type == NodeType::Leaf {
+                continue;
+            }
+            let mut opening = Vec::with_capacity(node.children.len());
+            for child_id in node.children.iter() {
+                let child = self.get_node(*child_id).unwrap();
+                opening.push(child.hash);
+            }
+            openings.push(opening);
+        }
+
+        openings
+    }
 }
-
-fn merge_paths() {}
