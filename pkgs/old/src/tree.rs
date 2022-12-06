@@ -6,7 +6,7 @@ use std::fmt::Debug;
 pub struct Tree {
     height: usize,
     max_width: usize,
-    root: NodeId,
+    pub root: NodeId,
     hasher: Hasher,
     nodes: Vec<Node>,
     size: usize,
@@ -96,6 +96,7 @@ impl Tree {
         if self.size == self.capacity + 1 {
             self.grow_and_insert(leaf);
             self.update_hash(leaf_id);
+            //self.update_hash(self.root);
             return leaf_id;
         }
 
@@ -112,7 +113,84 @@ impl Tree {
             return leaf_id;
         }
 
-        // Hard case, we need to create a new internal node before inserting
+        // Hard case, we need to create a old internal node before inserting
+        for (idx, child_id) in parent.children.iter().enumerate() {
+            let child = self.get(*child_id as usize).unwrap();
+            if child.node_type == NodeType::Leaf {
+                let parent_id = parent.id;
+                let new_internal_id = leaf_id + 1;
+                let mut new_internal = Node::new(NodeType::Internal, new_internal_id, None);
+                new_internal.parent = Some(parent.id);
+
+                let is_tail = idx >= parent.children.len() - 1;
+                let last_parent = if is_tail { new_internal_id } else { parent.id };
+
+                if is_tail {
+                    new_internal.children = vec![*child_id, leaf_id];
+                } else {
+                    new_internal.children = parent.children.clone();
+                }
+
+                let child = self.get_mut(*child_id as usize).unwrap();
+                child.parent = Some(new_internal_id);
+                leaf.parent = Some(new_internal_id);
+
+                self.nodes.push(leaf);
+                self.nodes.push(new_internal);
+
+                let parent = self.get_mut(self.last_parent as usize).unwrap();
+                if is_tail {
+                    parent.children[idx] = new_internal_id;
+                } else {
+                    parent.children = vec![new_internal_id, leaf_id];
+                }
+
+                self.last_parent = last_parent;
+
+                self.update_hash(leaf_id);
+                self.update_hash(new_internal_id);
+                self.update_hash(parent_id);
+
+                return leaf_id;
+            }
+        }
+
+        panic!("Should not reach here");
+
+        0 as NodeId
+    }
+
+    fn insert_raw(&mut self, value: String) -> NodeId {
+        let leaf_id = self.nodes.len() as NodeId;
+        let mut leaf = Node::new(NodeType::Leaf, leaf_id, Some(value.to_string()));
+        leaf.children = vec![self.last_leaf];
+        leaf.hash = (self.hasher)(leaf.value.as_ref().unwrap().as_bytes());
+        self.size += 1;
+        self.leaf_count += 1;
+        self.last_leaf = leaf_id;
+
+        // If capacity is not enough, grow the tree then insert the leaf
+        // Could make the tree balanced by implementing a rotation here
+        if self.size == self.capacity + 1 {
+            self.grow_and_insert(leaf);
+            self.update_hash(leaf_id);
+            return leaf_id;
+        }
+
+        let parent = self.get(self.last_parent as usize).unwrap();
+
+        // Simple case: there is still space in the last parent node
+        if parent.children.len() < self.max_width {
+            let parent = self.get_mut(self.last_parent as usize).unwrap();
+            parent.children.push(leaf_id);
+            leaf.parent = Some(self.last_parent);
+            self.nodes.push(leaf);
+            self.update_hash(leaf_id);
+
+            return leaf_id;
+        }
+
+        // Hard case, we need to create a old internal node before inserting
         for (idx, child_id) in parent.children.iter().enumerate() {
             let child = self.get(*child_id as usize).unwrap();
             if child.node_type == NodeType::Leaf {
@@ -146,6 +224,7 @@ impl Tree {
                 self.last_parent = last_parent;
 
                 self.update_hash(leaf_id);
+
                 return leaf_id;
             }
         }
@@ -220,7 +299,8 @@ impl Tree {
         let mut new_root = Node::new(NodeType::Root, new_root_id, None);
 
         // Update old root
-        let old_root = self.get_mut_root();
+        let old_root_id = self.root;
+        let old_root = self.get_mut(old_root_id as usize).unwrap();
         old_root.node_type = NodeType::Internal;
 
         // Update relationships
@@ -240,6 +320,8 @@ impl Tree {
         self.last_parent = new_root_id;
 
         //let visited_nodes = vec![new_root_id, leaf_id];
+        //self.update_hash(old_root_id);
+        //self.update_hash(new_root_id);
 
         leaf_id
     }
@@ -266,7 +348,20 @@ impl Tree {
         None
     }
 
-    fn update_hash(&mut self, index: NodeId) {
+    pub fn update_by_leaves(&mut self) {
+        let mut node_id = self.last_leaf;
+        loop {
+            self.update_hash(node_id);
+            let node = self.get(node_id as usize).unwrap();
+            if node.node_type != NodeType::Leaf {
+                break;
+            }
+
+            node_id = node.children[0];
+        }
+    }
+
+    pub fn update_hash(&mut self, index: NodeId) {
         let mut node = self.get(index as usize).unwrap();
 
         let proof_size = self.height * self.max_width + 1;
@@ -304,13 +399,48 @@ impl Tree {
     }
 
     // TODO: implement verify
-    fn verify(&self) {}
+    pub fn verify_node(&self, index: NodeId, recursive: bool) -> Option<()> {
+        let node = self.get(index as usize)?;
+
+        if node.node_type == NodeType::Leaf {
+            let hash = (self.hasher)(node.value.as_ref().unwrap().as_bytes());
+
+            if hash != node.hash {
+                return None;
+            }
+
+            return Some(());
+        }
+
+        let mut buff: Vec<u8> = Vec::with_capacity(self.max_width);
+
+        for child_id in node.children.iter() {
+            let child = self.get(*child_id as usize).unwrap();
+            buff.append(&mut child.hash.to_vec());
+        }
+
+        let hash = (self.hasher)(&buff);
+
+        if hash != node.hash {
+            return None;
+        }
+
+        if recursive {
+            for child_id in node.children.iter() {
+                self.verify_node(*child_id, recursive)?;
+            }
+        }
+
+        Some(())
+    }
 
     // TODO: implement traversal for batch updates
     fn path_to_root(&self) {}
 
     // TODO: to be called in grow_and_insert to rebalance the tree
-    fn rotate(&mut self) {}
+    fn rotate(&mut self) {
+        unimplemented!();
+    }
 }
 
 fn merge_paths() {}
