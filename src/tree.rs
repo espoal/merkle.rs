@@ -75,17 +75,22 @@ impl Tree {
 
         let mut openings = Vec::with_capacity(self.height);
 
-        let old_id = 0;
+        let mut old_id = 0;
         for node_id in root_path {
             let node = self.get_node(node_id).unwrap();
             if node.node_type == NodeType::Leaf {
+                old_id = node_id;
                 continue;
             }
             let mut opening = Vec::with_capacity(node.children.len());
             for child_id in node.children.iter() {
+                if *child_id == old_id {
+                    continue;
+                }
                 let child = self.get_node(*child_id).unwrap();
                 opening.push(child.hash);
             }
+            old_id = node_id;
             openings.push(opening);
         }
 
