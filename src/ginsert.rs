@@ -3,6 +3,8 @@ use crate::tree::Tree;
 
 impl Tree {
     pub(crate) fn grow_and_insert(&mut self, leaf: Node) -> NodeId {
+        //let cap = self.nodes.capacity();
+        //println!("capacity: {}", cap);
         let mut leaf = leaf;
         let leaf_id = leaf.id;
 
@@ -26,14 +28,10 @@ impl Tree {
         self.nodes.reserve(additional_capacity);
         self.nodes.push(leaf);
         self.nodes.push(new_root);
-        //self.size += 1;
         self.capacity *= self.max_width;
+        self.size += 1;
         self.root = new_root_id;
         self.last_parent = new_root_id;
-
-        //let visited_nodes = vec![new_root_id, leaf_id];
-        //self.update_hash(old_root_id);
-        //self.update_hash(new_root_id);
 
         leaf_id
     }
